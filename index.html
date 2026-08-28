@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>个人办公工作台</title>
+<link rel="stylesheet" href="css/style.css?v=2026082601">
+</head>
+<body>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="header-bg">
+    <svg viewBox="0 0 1200 80" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/200/svg" style="width:100%;height:100%">
+      <defs>
+        <linearGradient id="hg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#0d9488" stop-opacity=".05"/>
+          <stop offset="1" stop-color="#0f766e" stop-opacity=".01"/>
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="80" fill="url(#hg)"/>
+      <path d="M0,80 L0,55 Q100,35 200,50 Q300,25 400,45 Q500,20 600,40 Q700,22 800,42 Q900,18 1000,38 Q1100,30 1200,45 L1200,80 Z" fill="#0d9488" opacity=".04"/>
+      <path d="M0,80 L0,65 Q150,50 300,58 Q450,45 600,55 Q750,40 900,52 Q1050,38 1200,50 L1200,80 Z" fill="#0f766e" opacity=".03"/>
+    </svg>
+  </div>
+  <div class="header-content">
+    <div class="header-title">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0d9488" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <path d="M3 9h18M9 3v18"/>
+      </svg>
+      <h1>个人办公工作台</h1>
+    </div>
+    <div class="header-actions">
+      <input type="file" id="importFile" accept=".json" class="hidden" onchange="importData(event)">
+    </div>
+  </div>
+</header>
+
+<!-- Today's to handle -->
+<section class="today-handle" id="todayHandle"></section>
+
+<!-- Layout -->
+<div class="layout">
+  <nav class="sidebar" id="sidebar">
+    <div class="nav-item active" data-module="todo" onclick="switchModule('todo')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span>今天待办</span>
+    </div>
+    <div class="nav-item" data-module="projects" onclick="switchModule('projects')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span>项目跟进</span>
+    </div>
+    <div class="nav-item" data-module="notes" onclick="switchModule('notes')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18h6M10 22h4M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+      <span>灵感速记</span>
+    </div>
+    <div class="nav-item" data-module="review" onclick="switchModule('review')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18M7 12l4-4 4 4 5-5"/></svg>
+      <span>每周复盘</span>
+    </div>
+    <div class="nav-item" data-module="report" onclick="switchModule('report')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+      <span>一键日报</span>
+    </div>
+    <div class="nav-item" data-module="cases" onclick="switchModule('cases')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      <span>案例库</span>
+    </div>
+  </nav>
+
+  <main class="content">
+    <!-- Module: Todo -->
+    <section id="module-todo" class="module">
+      <div class="card">
+        <div class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          新建任务
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:2">
+            <input type="text" id="taskTitle" placeholder="任务名称…" onkeydown="if(event.key==='Enter')addTask()">
+          </div>
+          <div class="form-group" style="max-width:120px">
+            <label>优先级</label>
+            <select id="taskPriority"><option value="P0">P0 紧急</option><option value="P1" selected>P1 重要</option><option value="P2">P2 一般</option></select>
+          </div>
+          <div class="form-group" style="max-width:150px">
+            <label>截止日期</label>
+            <input type="date" id="taskDeadline">
+          </div>
+          <div class="form-group" style="max-width:180px">
+            <label>关联模块(可选)</label>
+            <select id="taskProject"><option value="">不关联</option></select>
+          </div>
+          <button class="btn" onclick="addTask()">添加</button>
+        </div>
+      </div>
+      <div id="taskList"></div>
+    </section>
+
+    <!-- Module: Notes -->
+    <section id="module-notes" class="module hidden">
+      <div class="card">
+        <div class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M9 18h6M10 22h4M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/></svg>
+          记录灵感
+          <button class="btn-outline btn-sm" onclick="exportNotesToObsidian()" title="导出灵感速记到知识库 0-收件箱" style="margin-left:auto">📤 导出到知识库</button>
+        </div>
+        <textarea id="noteContent" placeholder="随手记下想法、经验、待查的东西…" rows="3"></textarea>
+        <div class="form-row" style="margin-top:8px">
+          <div class="form-group" style="flex:1">
+            <input type="text" id="noteTags" placeholder="标签，逗号分隔（如：IPSec,调试经验）">
+          </div>
+          <button class="btn" onclick="addNote()">记录</button>
+        </div>
+      </div>
+      <div class="search-bar">
+        <input type="text" id="noteSearch" placeholder="搜索速记内容…" oninput="renderNotes()">
+      </div>
+      <div class="tag-filter-bar" id="tagFilterBar"></div>
+      <div id="noteList"></div>
+    </section>
+
+    <!-- Module: Projects -->
+    <section id="module-projects" class="module hidden">
+      <div class="card">
+        <div class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          新建客户项目
+          <button class="btn-outline btn-sm" onclick="exportProjectLogsToObsidian()" title="导出项目跟进记录到知识库对应的客户项目概述" style="margin-left:auto">📤 导出项目跟进到知识库</button>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:1">
+            <label>客户名称</label>
+            <input type="text" id="projCustomer" placeholder="如：北京恒舟">
+            <span class="field-hint">添加后，在下方客户卡片内逐个添加模块（如：飞连部署、VPN调试）</span>
+          </div>
+          <button class="btn" onclick="addProject()">添加客户</button>
+        </div>
+      </div>
+      <div class="module-toolbar">
+        <span class="task-sort-label">排序</span>
+        <select class="task-sort-sel" id="projSortSel" onchange="setProjSort()">
+          <option value="createdDesc">创建时间（新→旧）</option>
+          <option value="createdAsc">创建时间（旧→新）</option>
+          <option value="name">客户名称</option>
+          <option value="blocker">有卡点优先</option>
+        </select>
+      </div>
+      <div id="projectList"></div>
+    </section>
+
+    <!-- Module: Review -->
+    <section id="module-review" class="module hidden">
+      <div class="card-title" style="margin-bottom:16px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M3 3v18h18M7 12l4-4 4 4 5-5"/></svg>
+        本周复盘
+      </div>
+      <div class="review-stat" id="reviewStats"></div>
+      <div class="chart-card">
+        <div class="chart-title">优先级分布（本周完成）</div>
+        <div id="priorityChart"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">精力分布（各项目任务数）</div>
+        <div id="projectChart"></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">卡点汇总</div>
+        <ul class="blocker-list" id="blockerList"></ul>
+      </div>
+    </section>
+
+    <!-- Module: Daily Report -->
+    <section id="module-report" class="module hidden">
+      <div class="card-title" style="margin-bottom:16px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        一键写日报
+      </div>
+
+      <div class="dir-status unset" id="vaultDirStatus" style="margin-top:6px">
+        <span id="vaultDirStatusText">未设置知识库目录，日报仅保存在浏览器本地</span>
+        <button class="btn-sm btn-outline" onclick="pickVaultDir()" style="margin-left:auto">设置知识库</button>
+      </div>
+
+      <div class="report-form">
+        <div class="report-row">
+          <div class="report-field" style="max-width:185px">
+            <label>日期</label>
+            <div style="display:flex;gap:4px;align-items:center">
+              <input type="date" id="rptDate" style="flex:1;min-width:0">
+              <button class="btn-sm btn-outline" onclick="setReportDateToYesterday()" title="填入昨天，便于补写昨日日报">昨天</button>
+            </div>
+          </div>
+          <div class="report-field" style="max-width:120px">
+            <label>姓名</label>
+            <input type="text" id="rptName" value="吴天乐" readonly style="background:var(--bg)">
+          </div>
+          <div class="report-field" style="max-width:200px">
+            <label>岗位</label>
+            <input type="text" id="rptPosition" value="网络工程师（网联卓越）" readonly style="background:var(--bg)">
+          </div>
+          <div class="report-field" style="flex:2">
+            <label>客户名称</label>
+            <input type="text" id="rptCustomer" placeholder="输入或选择客户…" list="customerList">
+            <datalist id="customerList"></datalist>
+          </div>
+        </div>
+        <div class="report-row">
+          <div class="report-field" style="flex:1">
+            <label>服务项</label>
+            <input type="text" id="rptServiceItem" placeholder="如：系统集成-飞连部署">
+          </div>
+          <div class="report-field" style="max-width:200px">
+            <label>支持方式</label>
+            <select id="rptSupportType" class="report-select">
+              <option value="远程支持" selected>远程支持</option>
+              <option value="现场支持">现场支持</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:12px">
+          <label>今日工作内容 <button class="btn-sm btn-outline" onclick="autoFillWorkContent()" style="float:right;margin-top:-2px">按所选日期自动填充</button></label>
+          <textarea id="rptWorkContent" rows="5" placeholder="今日具体做了什么…"></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>学习要点与易错点</label>
+          <textarea id="rptLearning" rows="3" placeholder="今天学到的关键点、踩过的坑…"></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>今日收获</label>
+          <textarea id="rptTakeaways" rows="3" placeholder="总结、心得…"></textarea>
+        </div>
+
+        <div class="report-actions">
+          <button class="btn" onclick="saveDailyReport()">保存日报</button>
+          <button class="btn-outline btn-sm" onclick="exportCurrentDaily()">导出到知识库</button>
+          <button class="btn-outline btn-sm" onclick="copyReport('detail')">复制详细版</button>
+          <button class="btn-outline btn-sm" onclick="copyReport('simple')">复制精简版</button>
+          <button class="btn-outline btn-sm" onclick="clearReportForm()">清空表单</button>
+        </div>
+      </div>
+
+      <div class="section-label">历史日报</div>
+      <div id="pastReports"></div>
+    </section>
+
+    <!-- Module: Cases -->
+    <section id="module-cases" class="module hidden">
+      <div class="card">
+        <div class="card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          案例库
+          <div style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-outline btn-sm" onclick="exportCasesToKnowledgeBase()">📤 导出到飞连踩坑</button>
+          </div>
+        </div>
+        <div class="search-bar"><input type="text" id="caseSearch" placeholder="搜索案例（项目名 / 卡点 / 解决方案关键词）…" oninput="renderCases()"></div>
+      </div>
+      <div id="caseList"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Backup bar -->
+<div class="backup-bar" id="backupBar">
+  <div class="left">
+    <span id="dataCount">数据: 0 条</span>
+    <span class="backup-reminder hidden" id="backupReminder">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>
+      数据已积累，建议导出备份
+    </span>
+    <button class="btn-sm btn-outline" onclick="exportData()">导出备份</button>
+    <button class="btn-sm btn-outline" onclick="document.getElementById('importFile').click()">导入恢复</button>
+    <button class="btn-sm btn-outline" onclick="showFeishuSyncHelp()">飞书同步</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Modal -->
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-title" id="modalTitle">确认</div>
+    <div class="modal-text" id="modalText"></div>
+    <div class="modal-actions">
+      <button class="btn-outline btn-sm" onclick="closeModal()">取消</button>
+      <button class="btn btn-sm" id="modalConfirmBtn">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- JS: core must load first (defines state, utils, navigation) -->
+<script src="js/core.js?v=2026082402"></script>
+<!-- Module scripts: order doesn't matter, all use globals from core -->
+<script src="js/todo.js?v=2026082402"></script>
+<script src="js/notes.js?v=2026082402"></script>
+<script src="js/projects.js?v=2026082402"></script>
+<script src="js/review.js?v=2026082402"></script>
+<script src="js/report.js?v=2026082601"></script>
+<script src="js/cases.js?v=2026082402"></script>
+<script src="js/obsidian.js?v=2026082402"></script>
+<!-- Init after all modules are loaded -->
+<script>init();</script>
+
+</body>
+</html>
