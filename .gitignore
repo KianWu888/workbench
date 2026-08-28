@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# WorkBuddy project-local data (not source, must not enter git)
+.workbuddy/
+
+# Editor / OS
+*.swp
