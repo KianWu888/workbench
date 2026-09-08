@@ -6,3 +6,12 @@
 
 # Editor / OS
 *.swp
+
+# 飞书桥接密钥与令牌（含 app_secret / user_access_token，禁止入库）
+server/config.json
+server/token.json
+
+# Python 产物与日志
+__pycache__/
+*.pyc
+*.log

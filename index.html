@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
 <title>个人办公工作台</title>
-<link rel="stylesheet" href="css/style.css?v=2026082601">
+<link rel="stylesheet" href="css/style.css?v=2026090302">
 </head>
 <body>
 
@@ -235,8 +235,7 @@
         </div>
 
         <div class="report-actions">
-          <button class="btn" onclick="saveDailyReport()">保存日报</button>
-          <button class="btn-outline btn-sm" onclick="exportCurrentDaily()">导出到知识库</button>
+          <button class="btn" onclick="saveDailyReport()">保存日报（自动同步知识库）</button>
           <button class="btn-outline btn-sm" onclick="copyReport('detail')">复制详细版</button>
           <button class="btn-outline btn-sm" onclick="copyReport('simple')">复制精简版</button>
           <button class="btn-outline btn-sm" onclick="clearReportForm()">清空表单</button>
@@ -274,7 +273,8 @@
     </span>
     <button class="btn-sm btn-outline" onclick="exportData()">导出备份</button>
     <button class="btn-sm btn-outline" onclick="document.getElementById('importFile').click()">导入恢复</button>
-    <button class="btn-sm btn-outline" onclick="showFeishuSyncHelp()">飞书同步</button>
+    <button class="btn-sm btn-primary" onclick="showFeishuSyncHelp()" title="飞书多维表格批处理同步说明">同步飞书</button>
+    <button class="btn-sm btn-outline" onclick="showFeishuSyncHelp()">同步说明</button>
   </div>
 </div>
 
@@ -294,15 +294,15 @@
 </div>
 
 <!-- JS: core must load first (defines state, utils, navigation) -->
-<script src="js/core.js?v=2026082402"></script>
+<script src="js/core.js?v=2026090302"></script>
 <!-- Module scripts: order doesn't matter, all use globals from core -->
-<script src="js/todo.js?v=2026082402"></script>
-<script src="js/notes.js?v=2026082402"></script>
-<script src="js/projects.js?v=2026082402"></script>
-<script src="js/review.js?v=2026082402"></script>
-<script src="js/report.js?v=2026082601"></script>
-<script src="js/cases.js?v=2026082402"></script>
-<script src="js/obsidian.js?v=2026082402"></script>
+<script src="js/todo.js?v=2026090302"></script>
+<script src="js/notes.js?v=2026090302"></script>
+<script src="js/projects.js?v=2026090302"></script>
+<script src="js/review.js?v=2026090302"></script>
+<script src="js/report.js?v=2026090302"></script>
+<script src="js/cases.js?v=2026090302"></script>
+<script src="js/obsidian.js?v=2026090302"></script>
 <!-- Init after all modules are loaded -->
 <script>init();</script>
 

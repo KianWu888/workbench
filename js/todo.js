@@ -13,7 +13,7 @@ function renderTodayHandle(){
   });
   stuck.forEach(b=>{
     const pn=(b.project.customer?b.project.customer+'·':'')+b.module.name;
-    html+=`<span class="th-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>项目卡住: ${escapeHtml(pn)} — ${escapeHtml(b.log.content)} <button onclick="openResolveBlocker('${b.project.id}','${b.module.id}','${b.log.id}')">解决</button></span>`;
+    html+=`<span class="th-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>项目卡住: ${escapeHtml(pn)} — ${escapeHtml(b.log.content)} <button onclick="openBlockerEditor('${b.project.id}','${b.module.id}','${b.log.id}')">解决</button></span>`;
   });
   html+='</div>';
   el.innerHTML=html;
@@ -79,6 +79,7 @@ function renderTasks(){
             <span class="badge ${prioMap[t.priority]||'badge-p2'}">${prioLabel[t.priority]||t.priority}</span>
             ${dlBadge}${defBadge}${doneBadge}
             ${mod?`<span class="badge badge-project">${escapeHtml(moduleDisplayName(t.moduleId))}</span>`:''}
+            ${t.note?`<span class="badge badge-note" title="${escapeHtml(t.note)}">📝 ${escapeHtml(t.note)}</span>`:''}
           </div>
         </div>
         <div class="task-actions">
@@ -124,6 +125,7 @@ function renderTaskEditRow(t){
       <select id="editTaskPrio-${t.id}"><option value="P0"${t.priority==='P0'?' selected':''}>P0紧急</option><option value="P1"${t.priority==='P1'?' selected':''}>P1重要</option><option value="P2"${t.priority==='P2'?' selected':''}>P2一般</option></select>
       <input type="date" id="editTaskDate-${t.id}" value="${t.deadline||''}">
       <select id="editTaskProj-${t.id}"><option value="">不关联</option>${projOpts}</select>
+      <input type="text" id="editTaskNote-${t.id}" value="${escapeHtml(t.note||'')}" placeholder="备注">
       ${t.completed?`<label class="task-edit-extra"><span>完成时间</span><input type="datetime-local" id="editTaskDone-${t.id}" value="${t.completedAt?toLocalInput(t.completedAt):toLocalInput(Date.now())}"></label>`:''}
       <button class="btn-sm btn-primary" onclick="saveTaskEdit('${t.id}')">保存</button>
       <button class="btn-sm btn-outline" onclick="cancelTaskEdit()">取消</button>
@@ -134,7 +136,7 @@ function renderTaskEditRow(t){
 function addTask(){
   const title=document.getElementById('taskTitle').value.trim();
   if(!title){showToast('请输入任务名称','error');return;}
-  state.tasks.push({id:uid(),title,priority:document.getElementById('taskPriority').value,deadline:document.getElementById('taskDeadline').value,moduleId:document.getElementById('taskProject').value||null,completed:false,createdAt:Date.now(),deferredCount:0});
+  state.tasks.push({id:uid(),title,priority:document.getElementById('taskPriority').value,deadline:document.getElementById('taskDeadline').value,moduleId:document.getElementById('taskProject').value||null,completed:false,createdAt:Date.now(),updatedAt:Date.now(),deferredCount:0,note:'',feishuId:null,feishuUpdatedAt:0,feishuCustomer:'',feishuModule:''});
   document.getElementById('taskTitle').value='';
   document.getElementById('taskDeadline').value=todayStr();
   state.isSample=false;
@@ -146,8 +148,23 @@ function toggleTask(id){
   const t=state.tasks.find(x=>x.id===id);if(!t)return;
   t.completed=!t.completed;
   t.completedAt=t.completed?Date.now():null;
+  t.updatedAt=Date.now();
+  // 完成即转跟进：自动在该模块生成一条当天日期的跟进记录，并触发日报追加
+  const modRef=findModule(t.moduleId);
+  if(t.completed&&modRef){
+    const m=modRef.module;
+    if(!m.logs)m.logs=[];
+    if(!m.logs.some(l=>l.fromTaskId===t.id)){
+      m.logs.push({id:uid(),date:todayStr(),content:t.title,nextStep:'',isBlocker:false,fromTaskId:t.id,createdAt:Date.now(),updatedAt:Date.now()});
+    }
+    if(typeof syncDailyReportFor==='function')syncDailyReportFor(modRef.project.customer||'',todayStr());
+  }else if(!t.completed&&modRef){
+    // 撤销完成：移除自动生成的回链日志，避免残留
+    const m=modRef.module;
+    if(m&&m.logs){m.logs=m.logs.filter(l=>l.fromTaskId!==t.id);if(typeof syncDailyReportFor==='function')syncDailyReportFor(modRef.project.customer||'',todayStr());}
+  }
   state.isSample=false;
-  saveState();renderTasks();renderTodayHandle();updateBackupBar();
+  saveState();renderTasks();renderTodayHandle();renderProjects();updateBackupBar();
 }
 
 function deferTask(id){
@@ -156,6 +173,7 @@ function deferTask(id){
   if(t.deadline)t.deferredDates.push(t.deadline);
   t.deadline=tomorrowStr();
   t.deferredCount=(t.deferredCount||0)+1;
+  t.updatedAt=Date.now();
   state.isSample=false;
   saveState();renderTasks();renderTodayHandle();
   showToast('已顺延到明天','success');
@@ -167,6 +185,7 @@ function undoDeferTask(id){
   t.deadline=t.deferredDates.pop();
   t.deferredCount=Math.max((t.deferredCount||0)-1,0);
   if(t.deferredCount===0)t.deferredDates=[];
+  t.updatedAt=Date.now();
   state.isSample=false;
   saveState();renderTasks();renderTodayHandle();
   showToast('已撤销顺延','success');
@@ -197,10 +216,13 @@ function saveTaskEdit(id){
   t.priority=document.getElementById('editTaskPrio-'+id).value;
   t.deadline=document.getElementById('editTaskDate-'+id).value||null;
   t.moduleId=document.getElementById('editTaskProj-'+id).value||null;
+  const noteEl=document.getElementById('editTaskNote-'+id);
+  if(noteEl)t.note=noteEl.value.trim();
   if(t.completed){
     const dv=document.getElementById('editTaskDone-'+id).value;
     t.completedAt=dv?new Date(dv).getTime():Date.now();
   }
+  t.updatedAt=Date.now();
   editingTaskId=null;
   state.isSample=false;
   saveState();renderTasks();renderTodayHandle();updateBackupBar();

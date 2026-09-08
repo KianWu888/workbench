@@ -24,6 +24,45 @@ async function matchCustomerFolder(custName){
   }catch(e){console.error('matchCustomerFolder error',e);return{folder:input,clean:input};}
 }
 
+/* ========== 跟进截图同步到 Obsidian（与文字同一保存时机） ========== */
+// ponytail: base64 解码为二进制写盘；文件名按图片内容哈希，幂等不重复；vault 根目录「附件/」
+function _imgExt(mime){const e=(mime||'image/png').split('/')[1]||'png';return e.replace('+xml','').replace('jpeg','jpg');}
+function _b64ToBytes(b64){const bin=atob(b64);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes;}
+async function _imgId(b64){
+  try{if(crypto&&crypto.subtle){const buf=await crypto.subtle.digest('SHA-1',new TextEncoder().encode(b64));return [...new Uint8Array(buf)].slice(0,8).map(x=>x.toString(16).padStart(2,'0')).join('');}}catch(e){}
+  return 'x'+b64.length.toString(36)+'-'+b64.slice(-16).replace(/[^a-z0-9]/gi,'');
+}
+// 把 blocks 里的 base64 截图写入 vault 附件目录，并在 block 上 memoize 一个稳定 id（供嵌入引用）
+async function syncLogImagesToVault(blocks){
+  if(!vaultDirHandle||!blocks)return;
+  try{
+    const perm=await vaultDirHandle.queryPermission({mode:'readwrite'});
+    if(perm!=='granted')return;
+    const attDir=await vaultDirHandle.getDirectoryHandle('附件',{create:true});
+    for(const b of blocks){
+      if(b.t!=='img'||!b.v||b.v.indexOf('data:')!==0)continue;
+      const mm=b.v.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+      if(!mm)continue;
+      const mime=mm[1],b64=mm[2],ext=_imgExt(mime);
+      if(!b.id)b.id=await _imgId(b64);
+      const fname='att-'+b.id+'.'+ext;
+      try{const fh=await attDir.getFileHandle(fname,{create:true});const w=await fh.createWritable();await w.write(_b64ToBytes(b64));await w.close();}
+      catch(e){console.error('syncLogImagesToVault write',e);}
+    }
+  }catch(e){console.error('syncLogImagesToVault',e);}
+}
+// 把 blocks 里的图片转成 Obsidian 嵌入语法（![[附件/att-xxx.png]]）；未同步则留提示
+function logImageEmbeds(blocks){
+  if(!blocks||!blocks.length)return '';
+  const out=[];
+  for(const b of blocks){
+    if(b.t!=='img')continue;
+    if(b.id){const m=b.v.match(/^data:image\/([a-zA-Z0-9.+-]+)/);const e=(m&&m[1])?_imgExt(m[1]):'png';out.push('![[附件/att-'+b.id+'.'+e+']]');}
+    else out.push('（截图：未连接知识库，未同步）');
+  }
+  return out.join('\n');
+}
+
 async function exportDailyToObsidian(r){
   if(!vaultDirHandle)return;
   try{
@@ -49,6 +88,9 @@ async function exportDailyToObsidian(r){
       entry+='- 支持方式：'+rep.supportType+'\n\n';
       const wc=stripDailyMarkers(rep.workContent);
       if(wc)entry+='**今日工作内容**\n'+wc+'\n\n';
+      // ponytail: 从 log.blocks 重建今日跟进/卡点（含粘贴截图），与文字同一时机写盘到附件目录
+      const logMd=await buildDailyLogMd(date, rep.customer);
+      if(logMd)entry+='\n'+logMd+'\n';
       if(rep.learningPoints)entry+='**学习要点与易错点**\n'+rep.learningPoints+'\n\n';
       if(rep.takeaways)entry+='**今日收获**\n'+rep.takeaways+'\n';
       // 今日灵感（双向链接到 5-卡片盒 灵感文件）
@@ -136,20 +178,39 @@ async function exportProjectLogsToObsidian(silent){
     let hasContent=false;
     const modSections=[];
     const currentIds=new Set();
-    (p.modules||[]).forEach(m=>{
+    for(const m of (p.modules||[])){
       const logs=(m.logs||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
       const tasks=state.tasks.filter(t=>t.moduleId===m.id);
       const blks=(m.logs||[]).filter(l=>l.isBlocker);
       hasContent=true;   // 模块本身即结构内容：创建即有则写入知识库，不再因空模块跳过
       let sec='### '+m.name+'\n\n';
       sec+='#### 跟进记录（当前进度 / 下一步）\n\n';
-      if(logs.length){logs.forEach(l=>{currentIds.add(l.id);let line='- '+l.date+' '+(l.isBlocker?'(卡点) ':'');line+='【当前进度】'+l.content;if(l.nextStep)line+=' · 【下一步】'+l.nextStep;line+=' <!-- id:'+l.id+' -->\n';sec+=line;});}else{sec+='（暂无）\n';}
+      if(logs.length){
+        for(const l of logs){
+          currentIds.add(l.id);
+          let line='- '+l.date+' '+(l.isBlocker?'(卡点) ':'')+'【当前进度】'+l.content;
+          if(l.nextStep)line+=' · 【下一步】'+l.nextStep;
+          line+=' <!-- id:'+l.id+' -->\n';
+          sec+=line;
+          if(l.blocks&&l.blocks.some(b=>b.t==='img')){await syncLogImagesToVault(l.blocks);const emb=logImageEmbeds(l.blocks);if(emb)sec+=emb+'\n';}
+        }
+      }else{sec+='（暂无）\n';}
       sec+='\n#### 关联待办\n\n';
       if(tasks.length){tasks.forEach(t=>{const box=t.completed?'[x]':'[ ]';const prio=prioLabel[t.priority]||t.priority||'';const dl=t.deadline?(' · '+fmtDate(parseDate(t.deadline))):'';currentIds.add(t.id);sec+='- '+box+' '+(prio?prio+' ':'')+dl+' '+t.title+(t.completed?'（已完成）':'')+' <!-- id:'+t.id+' -->\n';});}else{sec+='（暂无）\n';}
       sec+='\n#### 卡点记录\n\n';
-      if(blks.length){blks.forEach(b=>{currentIds.add(b.id);const tag=b.blockerStatus==='已解决'?'✓ 已解决':(b.blockerStatus==='排查中'?'排查中':'待排查');sec+='- '+tag+' '+b.content+(b.workOrder?('（工单 '+b.workOrder+'）'):'');if(b.timeline&&b.timeline.length){sec+='\n  - 排查过程：\n'+b.timeline.map(t=>'    · '+fmtTime(t.time)+' '+t.text).join('\n');}if(b.blockerStatus==='已解决'&&b.resolution)sec+=' → '+b.resolution;sec+=' <!-- id:'+b.id+' -->\n';});}else{sec+='（暂无）\n';}
+      if(blks.length){
+        for(const b of blks){
+          currentIds.add(b.id);
+          const tag=b.blockerStatus==='已解决'?'✓ 已解决':(b.blockerStatus==='排查中'?'排查中':'待排查');
+          sec+='- '+tag+' '+b.content+(b.workOrder?('（工单 '+b.workOrder+'）'):'');
+          if(b.timeline&&b.timeline.length){sec+='\n  - 排查过程：\n'+b.timeline.map(t=>'    · '+fmtTime(t.time)+' '+t.text).join('\n');}
+          if(b.blockerStatus==='已解决'&&b.resolution)sec+=' → '+b.resolution;
+          sec+=' <!-- id:'+b.id+' -->\n';
+          if(b.blocks&&b.blocks.some(x=>x.t==='img')){await syncLogImagesToVault(b.blocks);const emb=logImageEmbeds(b.blocks);if(emb)sec+=emb+'\n';}
+        }
+      }else{sec+='（暂无）\n';}
       modSections.push(sec);
-    });
+    }
     if(!hasContent)continue;
     const mc=await matchCustomerFolder(p.customer||'未命名客户');
     const projDir=await vaultDirHandle.getDirectoryHandle('1-项目',{create:true});
@@ -193,6 +254,14 @@ async function exportProjectLogsToObsidian(silent){
   }
 }
 
+/* ponytail: 统一踩坑卡片的 Obsidian 链接命名，避免日报/客户概述/卡片互相引用时文件名对不上 */
+function computeCaseLink(c){
+  const dt=c.occurredDate?new Date(c.occurredDate):(c.resolvedAt?new Date(c.resolvedAt):new Date());
+  const ds2=String(dt.getFullYear()).slice(2)+pad(dt.getMonth()+1)+pad(dt.getDate());
+  const blocker=(c.blocker||'未命名案例').trim().replace(/[\/\\:*?"<>|]/g,'-').slice(0,20);
+  return '5-卡片盒/踩坑-'+ds2+'-'+blocker;
+}
+
 async function exportCasesToKnowledgeBase(silent){
   if(!vaultDirHandle){await pickVaultDir();}
   if(!vaultDirHandle){showToast('未选择知识库目录，无法导出','error');return;}
@@ -204,12 +273,10 @@ async function exportCasesToKnowledgeBase(silent){
   const cardDir=await vaultDirHandle.getDirectoryHandle('5-卡片盒',{create:true});
   let exported=0;
   for(const c of fresh){
-    const ds=c.resolvedAt?fmtDate(new Date(c.resolvedAt)):todayStr();
+    const ds=c.occurredDate?fmtDate(new Date(c.occurredDate)):(c.resolvedAt?fmtDate(new Date(c.resolvedAt)):todayStr());
     const blocker=(c.blocker||'未命名案例').trim();
-    // ponytail: 文件名=日期(YYMMDD,6位)+问题描述(前20字)；前面数字只留 6 位日期，不堆时间；客户归属靠内容里的双向链接
-    const dt=c.resolvedAt?new Date(c.resolvedAt):new Date();
-    const ds2=String(dt.getFullYear()).slice(2)+pad(dt.getMonth()+1)+pad(dt.getDate());
-    const safeName='踩坑-'+ds2+'-'+blocker.replace(/[\/\\:*?"<>|]/g,'-').slice(0,20);
+    const link=c.obsidianLink||computeCaseLink(c);
+    const safeName=link.replace(/^5-卡片盒\//,'');
     let custLink='';
     if(c.projectName){
       const mc=await matchCustomerFolder(c.projectName);
@@ -218,15 +285,21 @@ async function exportCasesToKnowledgeBase(silent){
     // ponytail: 不设 H1——文件名即标题，避免文件名与正文标题重复
     let md='';
     if(c.projectName)md+='- 关联客户：'+custLink+'\n';
-    md+='- 日期：'+ds+'\n\n';
+    md+='- 日期：'+ds+'\n';
+    if(c.resolvedAt){const rd=fmtDate(new Date(c.resolvedAt));if(rd!==ds)md+='- 解决日期：'+rd+'\n';}
+    md+='\n';
     md+='## 问题描述\n'+blocker+'\n\n';
     md+='## 解决方案\n'+(c.resolution||'（未填写）')+'\n';
+    // 双向链接：踩坑卡片反链到含该卡点的当日日报（log.date），Obsidian 两边都可见
+    let logDate=null;
+    for(const p of state.projects)for(const m of (p.modules||[]))for(const l of (m.logs||[]))if(l.caseId===c.id){logDate=l.date;break;}
+    if(logDate)md+='\n- 关联日报：[['+'6-日记/'+logDate+'|'+logDate+' 日报]]\n';
     const fh=await cardDir.getFileHandle(safeName+'.md',{create:true});
     const w=await fh.createWritable();
     await w.write(md);
     await w.close();
     c.exportedToObsidian=true;
-    c.obsidianLink='5-卡片盒/'+safeName;  // 供客户概述反向链接
+    c.obsidianLink=link;  // 供客户概述反向链接 + 日报反链
     exported++;
   }
   saveState();renderCases();

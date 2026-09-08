@@ -7,7 +7,7 @@ function renderCases(){
   if(search)cases=cases.filter(c=>(c.projectName+' '+c.blocker+' '+(c.resolution||'')).toLowerCase().includes(search));
   if(!cases.length){el.innerHTML='<div class="empty-hint">暂无案例。解除项目卡点后会自动入库。</div>';return;}
   el.innerHTML=cases.map(c=>{
-    const d=c.resolvedAt?new Date(c.resolvedAt):null;
+    const d=c.occurredDate?new Date(c.occurredDate):(c.resolvedAt?new Date(c.resolvedAt):null);
     const ds=d?fmtDate(d):'';
     const badge=c.projectName?`<span class="case-project-badge">${escapeHtml(c.projectName)}</span>`:'';
     const st=c.status||'已解决';
@@ -28,6 +28,7 @@ function editCase(id){
   const body=document.getElementById('modalText');
   document.getElementById('modalTitle').textContent='编辑案例';
   body.style.whiteSpace='normal';
+  const ods=c.occurredDate?fmtDate(new Date(c.occurredDate)):(c.resolvedAt?fmtDate(new Date(c.resolvedAt)):todayStr());
   const ds=c.resolvedAt?fmtDate(new Date(c.resolvedAt)):todayStr();
   const curStatus=c.status||'已解决';
   body.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px">
@@ -43,6 +44,8 @@ function editCase(id){
     </select>
     <label style="font-size:12px;color:var(--text2);font-weight:500">解决方案</label>
     <textarea id="editCaseResolution" style="min-height:80px" placeholder="怎么解决的？">${escapeHtml(c.resolution||'')}</textarea>
+    <label style="font-size:12px;color:var(--text2);font-weight:500">问题发生日期</label>
+    <input type="date" id="editCaseOccurred" value="${ods}">
     <label style="font-size:12px;color:var(--text2);font-weight:500">解决日期</label>
     <input type="date" id="editCaseDate" value="${ds}">
   </div>`;
@@ -54,6 +57,8 @@ function editCase(id){
     const newStatus=document.getElementById('editCaseStatus').value;
     c.status=newStatus;
     c.resolution=document.getElementById('editCaseResolution').value.trim();
+    c.occurredDate=document.getElementById('editCaseOccurred').value||c.occurredDate||todayStr();
+    c.obsidianLink=computeCaseLink(c);
     c.exportedToObsidian=false;
     if(newStatus!=='已解决'){
       c.resolution='';
@@ -75,7 +80,7 @@ function editCase(id){
 
 /* 构建单条案例的 md 块，末尾嵌入 caseId 锚点（HTML 注释，不影响阅读） */
 function buildCaseBlock(c){
-  const d=c.resolvedAt?new Date(c.resolvedAt):null;
+  const d=c.occurredDate?new Date(c.occurredDate):(c.resolvedAt?new Date(c.resolvedAt):null);
   const ds=d?fmtDate(d):todayStr();
   const title=(c.projectName?`[${c.projectName}] `:'')+(c.blocker||'');
   let b=ds+'\n\n### 事件：'+title+'\n\n';

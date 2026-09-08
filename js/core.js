@@ -104,6 +104,7 @@ function loadState(){
       p.modules.forEach(m=>{if(!m.id)m.id=uid();if(!m.logs)m.logs=[];if(m.completed===undefined)m.completed=false;});
     });
     if(!state.cases)state.cases=[];
+    (state.tasks||[]).forEach(t=>{if(!t.updatedAt)t.updatedAt=t.createdAt||Date.now();});
   }catch(e){console.error('loadState error',e)}
 }
 function saveState(){
@@ -185,7 +186,7 @@ function showModal(title,text,callback,confirmText){
   btn.onclick=callback?()=>{if(modalCallback)modalCallback();}:closeModal;
   document.getElementById('modalOverlay').classList.remove('hidden');
 }
-function closeModal(){document.getElementById('modalOverlay').classList.add('hidden');modalCallback=null}
+function closeModal(){document.getElementById('modalOverlay').classList.add('hidden');modalCallback=null;const b=document.getElementById('modalConfirmBtn');if(b)b.style.display='';}
 
 
 /* ========== Backup ========== */
@@ -201,27 +202,8 @@ function exportData(){
 }
 
 function showFeishuSyncHelp(){
-  const text='浏览器无法直接调用飞书 API，需要用本地 Python 脚本作为桥梁。\n\n步骤：\n1. 点击「导出备份」，得到 workspace_export.json\n2. 下载配置示例，填入 app_id / app_secret / 多维表格 token\n3. 安装依赖：pip install requests urllib3\n4. 同步日报到飞书云文档：python3 feishu_sync.py -c feishu_sync_config.json -e workspace_export.json -m push-daily\n5. 同步任务到多维表格：python3 feishu_sync.py -c feishu_sync_config.json -e workspace_export.json -m push-tasks\n6. 从多维表格拉取任务：python3 feishu_sync.py -c feishu_sync_config.json -e workspace_export.json -m pull-tasks -o workspace_import.json';
-  showModal('飞书同步说明',text,downloadFeishuConfigExample,'下载配置示例');
-}
-
-function downloadFeishuConfigExample(){
-  const cfg={
-    app_id:'cli_xxxxxxxxxxxxxxxx',
-    app_secret:'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    folder_token:'fldcnxxxxxxxxxxxxxxxx',
-    daily_report_doc_id:'',
-    daily_report_doc_title:'日报汇总',
-    task_bitable:{app_token:'N5Rtb7zKHa0qcmsBfQUcKTcXnUe',table_id:'tblhaxBpESt24p7X'}
-  };
-  const blob=new Blob([JSON.stringify(cfg,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download='feishu_sync_config.json';
-  document.body.appendChild(a);a.click();document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  closeModal();
-  showToast('配置示例已下载','success');
+  const text='飞书同步走「批处理脚本」，无需常驻服务（跨租户：用你个人账号的 user_access_token 访问企业1的表）：\n\n1. 工作台点「导出备份」，得到 workspace_export.json\n2. 终端运行：\n   python3 server/feishu_sync.py -e workspace_export.json -o workspace_export_synced.json\n   （首次运行弹浏览器，用【在该表有管理权限】的账号授权一次；之后用 refresh_token 直跑；-m pull 仅拉 / -m push 仅推）\n3. 工作台点「导入恢复」，选 workspace_export_synced.json 即可\n\n前置（飞书开发者后台，应用是企业2自建应用）：\n• 安全设置 → 重定向URL 加 http://127.0.0.1:8778/oauth/callback\n• 权限管理 → 在「用户身份权限(user_access_token)」下开通 bitable:app（读写）并发布版本\n• 你是企业1那张表的直接协作者且「可管理」即可，表内无需添加应用机器人协作者';
+  showModal('飞书同步说明',text);
 }
 
 function importData(event){

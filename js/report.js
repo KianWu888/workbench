@@ -44,7 +44,7 @@ function autoFillWorkContent(){
     const byCust={};blks.forEach(x=>{(byCust[x.cust]=byCust[x.cust]||[]).push(x);});
     Object.keys(byCust).forEach(cust=>{
       lines.push('【'+cust+'】');
-      byCust[cust].forEach(x=>lines.push(x.mod+'：'+x.l.content+'（'+(x.l.blockerStatus||'待排查')+(x.l.workOrder?' · 工单'+x.l.workOrder:'')+'）'));
+      byCust[cust].forEach(x=>{const l=x.l;const st=l.blockerStatus||'待排查';let line=x.mod+'：'+l.content+'（'+st+(l.workOrder?' · 工单'+l.workOrder:'')+'）';if(st==='已解决'&&l.resolution)line+=' → 解决方案：'+l.resolution+(blockerCaseLink(l)?(' [['+blockerCaseLink(l)+'|案例]]'):'');lines.push(line);});
       lines.push('');
     });
   }
@@ -58,6 +58,13 @@ function autoFillWorkContent(){
 const DR_START='<!-- WB-AUTO:日报跟进 -->';
 const DR_END='<!-- /WB-AUTO -->';
 
+// 根据卡点日志找到对应踩坑案例的 Obsidian 链接（用于日报↔踩坑双向链接）
+function blockerCaseLink(log){
+  if(!log.caseId)return null;
+  const c=state.cases.find(x=>x.id===log.caseId);
+  return c?(c.obsidianLink||computeCaseLink(c)):null;
+}
+
 function buildDailyAutoBlock(date,customer){
   const lines=[];
   const followLogs=[];
@@ -67,7 +74,7 @@ function buildDailyAutoBlock(date,customer){
     (p.modules||[]).forEach(m=>{
       (m.logs||[]).forEach(l=>{
         if(l.date!==date)return;
-        if(l.isBlocker)blkLogs.push({mod:m.name,content:l.content,st:l.blockerStatus||'待排查',order:l.workOrder});
+        if(l.isBlocker){const st=l.blockerStatus||'待排查';blkLogs.push({mod:m.name,content:l.content,st,order:l.workOrder,resolution:l.resolution||'',link:blockerCaseLink(l)});}
         followLogs.push({mod:m.name,content:l.content,next:l.nextStep});
       });
     });
@@ -81,7 +88,48 @@ function buildDailyAutoBlock(date,customer){
   if(blkLogs.length){
     lines.push('—— 今日卡点 ——');
     lines.push('【'+customer+'】');
-    blkLogs.forEach(x=>lines.push(x.mod+'：'+x.content+'（'+(x.st)+(x.order?(' · 工单'+x.order):'')+'）'));
+    blkLogs.forEach(x=>{
+      let line=x.mod+'：'+x.content+'（'+(x.st)+(x.order?(' · 工单'+x.order):'')+'）';
+      if(x.st==='已解决'&&x.resolution)line+=' → 解决方案：'+x.resolution+(x.link?(' [['+x.link+'|案例]]'):'');
+      lines.push(line);
+    });
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}
+
+// 从 log.blocks（文字 + 截图）重建当日「今日跟进 / 今日卡点」段，截图同步写盘后以内嵌 ![[附件/...]] 呈现
+async function buildDailyLogMd(date, customer){
+  const lines=[];
+  const follow=[], blk=[];
+  state.projects.forEach(p=>{
+    if(p.customer!==customer)return;
+    (p.modules||[]).forEach(m=>{
+      (m.logs||[]).forEach(l=>{
+        if(l.date!==date)return;
+        if(l.isBlocker){const st=l.blockerStatus||'待排查';blk.push({mod:m.name,content:l.content,next:l.nextStep,st,order:l.workOrder,resolution:l.resolution||'',link:blockerCaseLink(l),blocks:l.blocks});}
+        else follow.push({mod:m.name,content:l.content,next:l.nextStep,blocks:l.blocks});
+      });
+    });
+  });
+  if(follow.length){
+    lines.push('—— 今日跟进 ——');
+    lines.push('【'+customer+'】');
+    for(const x of follow){
+      lines.push(x.mod+'：'+x.content+(x.next?('（下一步：'+x.next+'）'):''));
+      if(x.blocks){await syncLogImagesToVault(x.blocks);const e=logImageEmbeds(x.blocks);if(e)lines.push(e);}
+    }
+    lines.push('');
+  }
+  if(blk.length){
+    lines.push('—— 今日卡点 ——');
+    lines.push('【'+customer+'】');
+    for(const x of blk){
+      let line=x.mod+'：'+x.content+'（'+(x.st)+(x.order?(' · 工单'+x.order):'')+'）';
+      if(x.st==='已解决'&&x.resolution)line+=' → 解决方案：'+x.resolution+(x.link?(' [['+x.link+'|案例]]'):'');
+      lines.push(line);
+      if(x.blocks){await syncLogImagesToVault(x.blocks);const e=logImageEmbeds(x.blocks);if(e)lines.push(e);}
+    }
     lines.push('');
   }
   return lines.join('\n').trim();
@@ -220,8 +268,10 @@ async function saveDailyReport(){
   }
   state.isSample=false;
   saveState();renderPastReports();updateBackupBar();
+  // 单一入口：已连知识库则自动导出；未连则弹一次选目录后导出
+  if(!vaultDirHandle){await pickVaultDir();}
   if(vaultDirHandle){await exportDailyToObsidian(rep);rep.exportedToObsidian=true;saveState();}
-  showToast('日报已保存'+(vaultDirHandle?'，已同步到知识库':''),'success');
+  showToast('日报已保存'+(vaultDirHandle?'，已同步到知识库':'（未连接知识库，仅本地保存）'),'success');
 }
 
 async function exportDailyReportById(id){
@@ -234,20 +284,7 @@ async function exportDailyReportById(id){
 }
 
 async function exportCurrentDaily(){
-  const data=collectReportData();if(!data)return;   // 校验客户+工作内容
-  let rep=state.dailyReports.find(x=>x.date===data.date&&x.customer===data.customer);
-  if(rep){
-    rep.serviceItem=data.serviceItem;rep.supportType=data.supportType;
-    rep.workContent=data.workContent;rep.learningPoints=data.learningPoints;
-    rep.takeaways=data.takeaways;rep.name=data.name;
-  }else{
-    rep=data;state.dailyReports.push(rep);
-  }
-  if(!vaultDirHandle){await pickVaultDir();}
-  if(!vaultDirHandle){showToast('未选择知识库目录，无法导出','error');return;}
-  await exportDailyToObsidian(rep);
-  rep.exportedToObsidian=true;saveState();renderPastReports();
-  showToast('已导出日报到知识库','success');
+  // 已合并进 saveDailyReport（单一入口：保存即自动同步知识库），保留空壳以防旧引用
 }
 
 function confirmDeleteReport(id){
